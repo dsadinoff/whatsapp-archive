@@ -5,6 +5,8 @@
 import argparse
 import datetime
 import dateutil.parser
+from pprint import pprint
+import html
 import itertools
 import jinja2
 import logging
@@ -49,6 +51,21 @@ def ParseLine(line):
     return None
 
 
+ATTACHMENT_IMG_RE = r'&lt;attached: (?P<filename>.+\.(jpe?g|png|gif))&gt;'
+ATTACHMENT_MOV_RE = r'&lt;attached: (?P<filename>.+\.(mp4|mov))&gt;'
+def massageBody(body):
+
+    body = re.sub('&',"&amp;", body)
+    body = re.sub('<',"&lt;", body)
+    body = re.sub('>',"&gt;", body)
+    body = re.sub(r'(?P<link>https?://.[^ ]+)', r'<a href="\g<link>">\g<link></a>', body)
+    if  re.search(ATTACHMENT_IMG_RE, body, re.IGNORECASE):
+        body =  re.sub(ATTACHMENT_IMG_RE, r'<a href="\g<filename>"><img src="\g<filename>"></a>', body, flags=re.IGNORECASE)
+    elif  re.search(ATTACHMENT_MOV_RE, body, re.IGNORECASE):
+        body =  re.sub(ATTACHMENT_MOV_RE, r'<a href="\g<filename>"><div class="container"><video src="\g<filename>"></video><div class="centered">PLAY</div></div></a>', body, flags=re.IGNORECASE)
+    fixed = re.sub(r'\n','<br>',body)
+    return fixed
+    
 def IdentifyMessages(lines):
     """Input text can contain multi-line messages. If there's a line that
     doesn't start with a date and a name, that's probably a continuation of the
@@ -65,7 +82,7 @@ def IdentifyMessages(lines):
                 # We have a new message, so there will be no more lines for the
                 # one we've seen previously -- it's complete. Let's add it to
                 # the list.
-                messages.append((msg_date, msg_user, msg_body))
+                messages.append((msg_date, msg_user, massageBody(msg_body)))
             msg_date, msg_user, msg_body = m
         else:
             if msg_date is None:
@@ -88,8 +105,9 @@ def TemplateData(messages, input_filename):
     file_basename = os.path.basename(input_filename)
     for user, msgs_of_user in itertools.groupby(messages, lambda x: x[1]):
         by_user.append((user, list(msgs_of_user)))
-    return dict(by_user=by_user, input_basename=file_basename,
-            input_full_path=input_filename)
+    return dict(by_user=by_user,
+                input_basename=file_basename,
+                input_full_path=input_filename)
 
 
 def FormatHTML(data):
@@ -100,6 +118,27 @@ def FormatHTML(data):
         <meta charset="utf-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
+
+.container {
+  max-width :300px;
+  position: relative;
+  text-align: center;
+  color: white;
+}
+.centered {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: large;
+}
+video{
+   width: 100%;
+
+}
+    img {
+    max-width: 300px;
+    }
             body {
                 font-family: sans-serif;
                 font-size: 10px;
@@ -137,7 +176,7 @@ def FormatHTML(data):
             <span class="date">{{ messages[0][0] }}</span>
             <ol class="messages">
             {% for message in messages %}
-                <li>{{ message[2] | e }}</li>
+                <li>{{ message[2] }}</li>
             {% endfor %}
             </ol>
             </li>
@@ -159,6 +198,7 @@ def main():
     with open(args.input_file, 'rt', encoding='utf-8-sig') as fd:
         messages = IdentifyMessages(fd.readlines())
     template_data = TemplateData(messages, args.input_file)
+    # print (pprint(template_data))
     HTML = FormatHTML(template_data)
     with open(args.output_file, 'w', encoding='utf-8') as fd:
         fd.write(HTML)
