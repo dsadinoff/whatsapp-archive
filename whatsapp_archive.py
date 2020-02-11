@@ -15,6 +15,7 @@ import jinja2
 import logging
 import os.path
 import re
+import unicodedata
 
 # Format of the standard WhatsApp export line. This is likely to change in the
 # future and so this application will need to be updated.
@@ -39,6 +40,7 @@ FIRSTLINE_RE = (DATETIME_RE +
                '(?P<body>.*$)')
 
 
+
 class Error(Exception):
     """Something bad happened."""
 
@@ -61,33 +63,49 @@ def ParseLine(line):
     """Parses a single line of WhatsApp export file."""
     if(0==  len(line)):
         return None;
+
+    struct = None
+    addLinks = True
+
     m = re.match(WHATSAPP_RE, line, re.DOTALL)
     if m:
+        logging.debug("mode 1")
         d = dateutil.parser.parse("%s %s" % (m.group('date'),
             m.group('time')), dayfirst=True)
-        return {
+        struct =  {
 	    'date': d,
 	    'user': m.group('name'),
 	    'color': getColor(m.group('name')),
-	    'body': massageBody(m.group('body'))
+	    'body': m.group('body')
         }
-    # Maybe it's the first line which doesn't contain a person's name.
-    m = re.match(FIRSTLINE_RE, line, re.DOTALL)
-    if m:
-        d = dateutil.parser.parse("%s %s" % (m.group('date'),
-            m.group('time')), dayfirst=True)
-        return {
-	    'date':d, 
-	    'user': "nobody", 
-            'body': massageBody(m.group('body'))
-        }
-    m = re.match(
-        DATETIME_RE + SEPARATOR_RE + NAME_RE
-        +r': '
-        +r'(?P<body>.*)', line,  re.DOTALL)
-    logging.warn ("parse fail for line: ")
-    logging.warn (line.encode("utf-8"));
-    return None
+    else:
+        # Maybe it's the first line which doesn't contain a person's name.
+        m = re.match(FIRSTLINE_RE, line, re.DOTALL)
+        if m:
+            logging.debug("mode 2")
+        
+            d = dateutil.parser.parse("%s %s" % (m.group('date'),
+                                                 m.group('time')), dayfirst=True)
+            struct =  {
+	        'date':d, 
+	        'user': "nobody", 
+                'body': m.group('body')
+            }
+    if struct is None:
+        logging.warning("parse fail for line: ")
+        logging.warning(line.encode("utf-8"));
+        return None
+
+    # guess directionality of body by sampling first char.  Arguably could be more clever.
+    dir="ltr"
+    firstChar = struct['body'][0]
+    if 'R' == unicodedata.bidirectional(firstChar):
+        dir = 'rtl'
+    struct['dir'] = dir
+    
+    if addLinks:
+        struct['body'] = massageBody(struct['body'])
+    return struct
 
 
 ATTACHMENT_IMG_RE = r'&lt;attached: (?P<filename>.+\.(jpe?g|png|gif|webp))&gt;'
@@ -116,7 +134,10 @@ def IdentifyMessages(lines):
     msg_user = None
     msg_body = None
     for line in lines:
-        messages.append( ParseLine(line))
+        message = ParseLine(line)
+        if  message is None:
+            continue;
+        messages.append( message )
     return messages
 
 
@@ -193,7 +214,10 @@ ol.message-list {
 .body {
     margin-left: 1em;
     font-size: 14.2px;
-            }
+}
+.body[dir=rtl]{
+    text-align:right;
+}
 span.username {
     color: #00bfa5;
     font-size: 12.8px;
@@ -202,7 +226,7 @@ span.username {
 }
 .date-container-1{
     float:right;
-    margin:-10px 0 -5px 4px;
+    margin:-5px 0 -5px 4px;
 }   
 .date-container-2{
     color: rgba(0,0,0,.45);
@@ -263,7 +287,7 @@ header img.group-image{
             <li >
     <div class='message'>
               <span class="username" style="color: {{message.color}};">{{ message.user }}</span>
-              <div class="body">
+              <div class="body"  dir={{message.dir}}>
                   {{ message.body }}
               </div>
          <div class="date-container-1">
