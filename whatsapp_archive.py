@@ -51,8 +51,9 @@ def ParseLine(line):
     return None
 
 
-ATTACHMENT_IMG_RE = r'&lt;attached: (?P<filename>.+\.(jpe?g|png|gif))&gt;'
+ATTACHMENT_IMG_RE = r'&lt;attached: (?P<filename>.+\.(jpe?g|png|gif|webp))&gt;'
 ATTACHMENT_MOV_RE = r'&lt;attached: (?P<filename>.+\.(mp4|mov))&gt;'
+ATTACHMENT_AUDIO_RE = r'&lt;attached: (?P<filename>.+\.(opus))&gt;'
 def massageBody(body):
 
     body = re.sub('&',"&amp;", body)
@@ -63,6 +64,8 @@ def massageBody(body):
         body =  re.sub(ATTACHMENT_IMG_RE, r'<a href="\g<filename>"><img src="\g<filename>"></a>', body, flags=re.IGNORECASE)
     elif  re.search(ATTACHMENT_MOV_RE, body, re.IGNORECASE):
         body =  re.sub(ATTACHMENT_MOV_RE, r'<a href="\g<filename>"><div class="container"><video src="\g<filename>"></video><div class="centered">PLAY</div></div></a>', body, flags=re.IGNORECASE)
+    elif  re.search(ATTACHMENT_AUDIO_RE, body, re.IGNORECASE):
+        body =  re.sub(ATTACHMENT_AUDIO_RE, r'<a href="\g<filename>"><audio controls><source src="\g<filename>" /></audio></a>', body, flags=re.IGNORECASE)
     fixed = re.sub(r'\n','<br>',body)
     return fixed
     
