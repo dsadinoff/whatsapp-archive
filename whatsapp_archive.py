@@ -3,6 +3,7 @@
 """Reads a WhatsApp conversation export file and writes a HTML file."""
 
 import argparse
+import sys
 import datetime
 import dateutil.parser
 from pprint import pprint
@@ -16,15 +17,20 @@ import re
 # Format of the standard WhatsApp export line. This is likely to change in the
 # future and so this application will need to be updated.
 DATE_RE = '(?P<date>[\d/-]+)'
+LRM = r'\u200e'
+LRM_OPT = LRM + '?'
 TIME_RE = '(?P<time>[\d:]+( [AP]M)?)'
 DATETIME_RE = '\[?' + DATE_RE + ',? ' + TIME_RE + '\]?'
 SEPARATOR_RE = '( - |: | )'
 NAME_RE = '(?P<name>[^:]+)'
-WHATSAPP_RE = (DATETIME_RE +
-               SEPARATOR_RE +
-               NAME_RE +
-               ': '
-               '(?P<body>.*$)')
+WHATSAPP_RE = (
+    LRM_OPT
+    + DATETIME_RE 
+    + SEPARATOR_RE 
+    +NAME_RE 
+    + ': ' 
+    + LRM_OPT 
+    + '(?P<body>.*$)')
 
 FIRSTLINE_RE = (DATETIME_RE +
                SEPARATOR_RE +
@@ -37,17 +43,25 @@ class Error(Exception):
 
 def ParseLine(line):
     """Parses a single line of WhatsApp export file."""
-    m = re.match(WHATSAPP_RE, line)
+    if(0==  len(line)):
+        return None;
+    m = re.match(WHATSAPP_RE, line, re.DOTALL)
     if m:
         d = dateutil.parser.parse("%s %s" % (m.group('date'),
             m.group('time')), dayfirst=True)
-        return d, m.group('name'), m.group('body')
+        return {'date': d, 'user': m.group('name'), 'body': massageBody(m.group('body'))}
     # Maybe it's the first line which doesn't contain a person's name.
-    m = re.match(FIRSTLINE_RE, line)
+    m = re.match(FIRSTLINE_RE, line, re.DOTALL)
     if m:
         d = dateutil.parser.parse("%s %s" % (m.group('date'),
             m.group('time')), dayfirst=True)
-        return d, "nobody", m.group('body')
+        return {'date':d, 'user': "nobody", 'body': massageBody(m.group('body'))}
+    m = re.match(
+        DATETIME_RE + SEPARATOR_RE + NAME_RE
+        +r': '
+        +r'(?P<body>.*)', line,  re.DOTALL)
+    logging.warn ("parse fail for line: ")
+    logging.warn (line.encode("utf-8"));
     return None
 
 
@@ -56,9 +70,9 @@ ATTACHMENT_MOV_RE = r'&lt;attached: (?P<filename>.+\.(mp4|mov))&gt;'
 ATTACHMENT_AUDIO_RE = r'&lt;attached: (?P<filename>.+\.(opus))&gt;'
 def massageBody(body):
 
-    body = re.sub('&',"&amp;", body)
-    body = re.sub('<',"&lt;", body)
-    body = re.sub('>',"&gt;", body)
+    body = re.sub(r'&',"&amp;", body)
+    body = re.sub(r'<',"&lt;", body)
+    body = re.sub(r'>',"&gt;", body)
     body = re.sub(r'(?P<link>https?://.[^ ]+)', r'<a href="\g<link>">\g<link></a>', body)
     if  re.search(ATTACHMENT_IMG_RE, body, re.IGNORECASE):
         body =  re.sub(ATTACHMENT_IMG_RE, r'<a href="\g<filename>"><img src="\g<filename>"></a>', body, flags=re.IGNORECASE)
@@ -70,32 +84,14 @@ def massageBody(body):
     return fixed
     
 def IdentifyMessages(lines):
-    """Input text can contain multi-line messages. If there's a line that
-    doesn't start with a date and a name, that's probably a continuation of the
-    previous message and should be appended to it.
+    """Input text is split by \rs.
     """
     messages = []
     msg_date = None
     msg_user = None
     msg_body = None
     for line in lines:
-        m = ParseLine(line)
-        if m is not None:
-            if msg_date is not None:
-                # We have a new message, so there will be no more lines for the
-                # one we've seen previously -- it's complete. Let's add it to
-                # the list.
-                messages.append((msg_date, msg_user, massageBody(msg_body)))
-            msg_date, msg_user, msg_body = m
-        else:
-            if msg_date is None:
-                raise Error("Can't parse the first line: " + repr(line) +
-                        ', regexes are FIRSTLINE_RE=' + repr(FIRSTLINE_RE) +
-                        ' and WHATSAPP_RE=' + repr(WHATSAPP_RE))
-            msg_body += '\n' + line.strip()
-    # The last message remains. Let's add it, if it exists.
-    if msg_date is not None:
-        messages.append((msg_date, msg_user, msg_body))
+        messages.append( ParseLine(line))
     return messages
 
 
@@ -106,9 +102,9 @@ def TemplateData(messages, input_filename):
     """
     by_user = []
     file_basename = os.path.basename(input_filename)
-    for user, msgs_of_user in itertools.groupby(messages, lambda x: x[1]):
-        by_user.append((user, list(msgs_of_user)))
-    return dict(by_user=by_user,
+    # for user, msgs_of_user in itertools.groupby(messages, lambda x: x[1]):
+    #     by_user.append((user, list(msgs_of_user)))
+    return dict(messages=messages,
                 input_basename=file_basename,
                 input_full_path=input_filename)
 
@@ -154,7 +150,7 @@ video{
             }
             ol.messages {
                 list-style-type: none;
-                list-style-position: inside;
+                list-style-position: inside
                 margin: 0;
                 padding: 0;
             }
@@ -173,14 +169,12 @@ video{
     <body>
         <h1>{{ input_basename }}</h1>
         <ol class="users">
-        {% for user, messages in by_user %}
+        {% for message in messages %}
             <li>
-            <span class="username">{{ user }}</span>
-            <span class="date">{{ messages[0][0] }}</span>
+            <span class="username">{{ message.user }}</span>
+            <span class="date">{{ message.date }}</span>
             <ol class="messages">
-            {% for message in messages %}
-                <li>{{ message[2] }}</li>
-            {% endfor %}
+                <li>{{ message.body }}</li>
             </ol>
             </li>
         {% endfor %}
@@ -198,10 +192,11 @@ def main():
     parser.add_argument('-i', dest='input_file', required=True)
     parser.add_argument('-o', dest='output_file', required=True)
     args = parser.parse_args()
-    with open(args.input_file, 'rt', encoding='utf-8-sig') as fd:
-        messages = IdentifyMessages(fd.readlines())
+    with open(args.input_file, 'rb') as fd:
+        body = fd.read()
+        lines = [ str.decode('utf-8-sig')  for str in body.split( b'\r\n')]
+        messages = IdentifyMessages(lines)
     template_data = TemplateData(messages, args.input_file)
-    # print (pprint(template_data))
     HTML = FormatHTML(template_data)
     with open(args.output_file, 'w', encoding='utf-8') as fd:
         fd.write(HTML)
