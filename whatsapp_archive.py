@@ -142,32 +142,35 @@ def FormatHTML(data):
         <meta charset="utf-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-
 .container {
-  max-width :300px;
-  position: relative;
-  text-align: center;
-  color: white;
+    max-width :300px;
+    position: relative;
+    text-align: center;
+    color: white;
 }
 .centered {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: large;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: large;
 }
 video{
-   width: 100%;
-
+    width: 100%;
+    
 }
-    img {
+img {
     max-width: 300px;
-    }
-    body {
-      font-family: Segoe UI,Helvetica Neue,Helvetica,Lucida Grande,Arial,Ubuntu,Cantarell,Fira Sans,sans-serif;
-
-                font-size: 10px;
-            }
+}
+body {
+    font-family: Segoe UI,Helvetica Neue,Helvetica,Lucida Grande,Arial,Ubuntu,Cantarell,Fira Sans,sans-serif;
+    
+    font-size: 10px;
+    overflow:hidden;
+    height: 100%;
+    width: 100%;
+    margin:0;
+}
 ol.message-list {
     background-color:#e5ddd5;
     list-style-type: none;
@@ -176,45 +179,85 @@ ol.message-list {
     padding: 0;
 }
 .message-list li{
-  margin:2px 5px;
-  max-width: 65%;
+    margin:2px 5px;
+    max-width: 65%;
 }
-  .message-list .message{
-   padding: 6px 7px 8px 9px;
-
+.message-list .message{
+    padding: 6px 7px 8px 9px;
+    
     background-color:white;
     border-radius:7.5px;
     box-shadow:0 1px 0.5px rgba(0,0,0,.13);
-
-    }
-            .body {
-                margin-left: 1em;
-                font-size: 14.2px;
-            }
-            span.username {
-                color: #00bfa5;
-                font-size: 12.8px;
-                font-weight: 500;
-                line-height: 22px;
-            }
-            .date-container-1{
-       float:right;
-     margin:-10px 0 -5px 4px;
-    }   
-  .date-container-2{
-      color: rgba(0,0,0,.45);
-      font-size: 11px;
-      height: 15px;
-      line-height: 15px;
-      white-space:nowrap;
+    
 }
-            .date {
-               display:inline-block;
+.body {
+    margin-left: 1em;
+    font-size: 14.2px;
             }
+span.username {
+    color: #00bfa5;
+    font-size: 12.8px;
+    font-weight: 700;
+    line-height: 22px;
+}
+.date-container-1{
+    float:right;
+    margin:-10px 0 -5px 4px;
+}   
+.date-container-2{
+    color: rgba(0,0,0,.45);
+    font-size: 11px;
+    height: 15px;
+    line-height: 15px;
+    white-space:nowrap;
+}
+.date {
+    display:inline-block;
+}
+
+.main{
+    display:flex;
+    flex-direction: column;
+    height: calc(100vh - 38px);
+    background-color: #e5ddd5;
+    margin-top:19px;
+}
+header{
+    flex: 0 0 59px;
+    display:flex;
+    order: 1;
+    height: 59px;
+    background-color: #ededed;
+    padding: 10px 16px;
+    width: 100%;
+    align-items:center;
+    position: relative;
+    z-index:1000;
+}
+
+.message-list-container{
+    flex: 1 1 0;
+    order : 2 ;
+    position: relative;
+    z-index: 1;
+    overflow:auto;
+}
+
+header img.group-image{
+    width: 64px;
+}
+
+
         </style>
     </head>
     <body>
+<div class="main"> 
+   <header>
+	<a href="group-image.jpeg"><img  class='group-image' src="group-image.jpeg"></a>
         <h1>{{ input_basename }}</h1>
+
+   </header>
+   <div class="message-list-container">
         <ol class="message-list">
         {% for message in messages %}
             <li >
@@ -234,6 +277,8 @@ ol.message-list {
             </li>
         {% endfor %}
         </ol>
+    </div>
+</div>
     </body>
     </html>
     """
