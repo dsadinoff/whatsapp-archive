@@ -150,10 +150,14 @@ def IdentifyMessages(lines, fileName):
     msg_user = None
     msg_body = None
     groupName = fileName
+    counter =1;
     for line in lines:
-        message, groupName = ParseLine(line, groupName)
+        message, groupName = ParseLine(line,groupName)
         if  message is None:
             continue;
+
+        message['id'] = 'm' + str(counter);
+        counter = counter +1
         messages.append( message )
     return messages, groupName;
 
@@ -319,7 +323,7 @@ header img.group-image{
         <ol class="message-list">
         {% for message in messages %}
             <li >
-    <div class='message'>
+    <div id="{{ message.id }}" class='message'>
               <span class="username" style="color: {{message.color}};">{{ message.user }}</span>
               <div class="body"  dir={{message.dir}}>
                   {{ message.body }}
