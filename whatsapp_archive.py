@@ -16,6 +16,7 @@ import logging
 import os.path
 import re
 import unicodedata
+from PIL import Image
 
 # Format of the standard WhatsApp export line. This is likely to change in the
 # future and so this application will need to be updated.
@@ -124,21 +125,51 @@ def ParseLine(line, groupName):
     return (struct, groupName)
 
 
-ATTACHMENT_IMG_RE = r'&lt;attached: (?P<filename>.+\.(jpe?g|png|gif|webp))&gt;'
-ATTACHMENT_MOV_RE = r'&lt;attached: (?P<filename>.+\.(mp4|mov|3gp))&gt;'
-ATTACHMENT_AUDIO_RE = r'&lt;attached: (?P<filename>.+\.(opus))&gt;'
+ATTACHMENT_RE = r'&lt;attached: (?P<filename>.+\.(\w+))&gt;'
+IMAGE_RE = r'(jpe?g|png|gif|webp)$'
+VIDEO_RE = r'(mp4|mov|3gp)$'
+AUDIO_RE = r'(m4a|mp3|opus|wav)$'
 def massageBody(body):
 
     body = re.sub(r'&',"&amp;", body)
     body = re.sub(r'<',"&lt;", body)
     body = re.sub(r'>',"&gt;", body)
-    body = re.sub(r'(?P<link>https?://.[^ \n<]+)', r'<a href="\g<link>">\g<link></a>', body)
-    if  re.search(ATTACHMENT_IMG_RE, body, re.IGNORECASE):
-        body =  re.sub(ATTACHMENT_IMG_RE, r'<a href="\g<filename>"><img loading=lazy src="\g<filename>"></a>', body, flags=re.IGNORECASE)
-    elif  re.search(ATTACHMENT_MOV_RE, body, re.IGNORECASE):
-        body =  re.sub(ATTACHMENT_MOV_RE, r'<a href="\g<filename>"><div class="container"><video loading=lazy src="\g<filename>"></video><div class="centered">PLAY</div></div></a>', body, flags=re.IGNORECASE)
-    elif  re.search(ATTACHMENT_AUDIO_RE, body, re.IGNORECASE):
-        body =  re.sub(ATTACHMENT_AUDIO_RE, r'<a href="\g<filename>"><audio loading=lazy controls><source src="\g<filename>" /></audio></a>', body, flags=re.IGNORECASE)
+    body = re.sub(r'(?P<link>https?://.[^ \n<]+)', r'<a target=media href="\g<link>">\g<link></a>', body)
+
+    m = re.search(ATTACHMENT_RE, body, re.IGNORECASE)
+    if (m):
+        fileName = m.group('filename')
+        if re.search(IMAGE_RE, fileName, re.IGNORECASE):
+        
+            im = Image.open(fileName)
+            (width, height) = im.size
+            logging.debug(f"file={fileName} width = {width}, height = {height}")
+        
+            body =  re.sub(ATTACHMENT_RE,
+                       r'<a target=media href="{fileName}"><img width={width} height={height} loading=lazy src="{fileName}"></a>\n'.format(
+                           fileName=fileName,
+                           width=width,height=height),
+                       body, flags=re.IGNORECASE)
+        elif re.search(VIDEO_RE, fileName, re.IGNORECASE):
+            body =  re.sub(ATTACHMENT_RE,
+                           r'<a target=media href="{fileName}"><div class="container"><video loading=lazy src="{fileName}"></video><div class="centered">PLAY</div></div></a>\n'.format(fileName=fileName), body, flags=re.IGNORECASE)
+        elif re.search(AUDIO_RE, fileName, re.IGNORECASE):
+            body =  re.sub(ATTACHMENT_RE, r'<a href="{fileName}"><audio loading=lazy controls><source src="{fileName}" /></audio></a>\n'.format(
+                fileName=fileName
+            ), body, flags=re.IGNORECASE)
+        else:
+            # plain attachment
+            body = re.sub(ATTACHMENT_RE, r'<a href="{fileName}">{fileName}</a>\n'.format(
+                fileName=fileName
+            ), body, flags=re.IGNORECASE)
+
+        # bold
+    body = re.sub(r'\*(.*?)\*', r'<b>\1</b>', body)
+
+    # italics
+    # dancing with the devil here a bit.  need to ensure that this doesn't interfere with urls, so I put a space in there..
+    body = re.sub(r' _(.*?)_', r' <em>\1</em>', body)
+        
     fixed = re.sub(r'\n','<br>',body)
     return fixed
     
@@ -204,6 +235,7 @@ video{
 }
 img {
     max-width: 300px;
+    height: auto;
 }
 body {
     font-family: Segoe UI,Helvetica Neue,Helvetica,Lucida Grande,Arial,Ubuntu,Cantarell,Fira Sans,sans-serif;
